@@ -27,9 +27,9 @@ const erudaInjector: PluginOption = {
 }
 
 const manifest = {
-  "short_name": "Ytify",
-  "name": "Listen with ytify",
-  "description": "32kb/s to 128kb/s youtube audio streaming website. Copy a youtube video link and listen to it as an audio totally free.",
+  "short_name": "Shade Music",
+  "name": "Shade Music Plus",
+  "description": "Meet Shade Music Plus - ot's a new way of Music!",
   "icons": [
     {
       "src": "logo192.png",
