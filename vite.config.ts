@@ -29,7 +29,7 @@ const erudaInjector: PluginOption = {
 const manifest = {
   "short_name": "Shade Music",
   "name": "Shade Music Plus",
-  "description": "Meet Shade Music Plus - ot's a new way of Music!",
+  "description": "Meet Shade Music Plus - It's a new way of Music!",
   "icons": [
     {
       "src": "logo192.png",
