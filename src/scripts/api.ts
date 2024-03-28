@@ -14,8 +14,8 @@ const defData: apiList = {
     custom: false
   },
   'image': {
-    name: 'darkness.services',
-    url: 'https://pipedapi.darkness.services/',
+    name: 'r4fo.com 🇩🇪',
+    url: 'https://pipedproxy.r4fo.com',
     custom: false
   }
 };
