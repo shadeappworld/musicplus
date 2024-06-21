@@ -3,33 +3,25 @@
 
 <head>
   <meta charset="UTF-8">
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-H4R0WR1V33"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
 
-  gtag('config', 'G-H4R0WR1V33');
-</script>
   <meta name="description"
-    content="It's a new way of Music! 32kb/s to 128kb/s youtube audio streaming website. Copy a youtube video link or search a video up and listen to it as an audio totally free. Background Playback, Queues, Themes for a great user experience.">
-  <meta name="author" content="Shade Sofrware and Animesh Nath">
+    content="48kb/s to 160kb/s youtube audio streaming website. Copy a youtube video link or search a video up and listen to it as an audio totally free. Background Playback, Queues, Themes for a great user experience.">
+  <meta name="author" content="Animesh Nath">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="white">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="keywords"
-    content="ytify,yify, Ytify, Youtube, youtube, Music,music, audio,opus, 32kbps,64kbps,Free ,spotify ,streaming, music-player ,  youtube-player , free-music, ytmusic">
+    content="Shade Music Plus,yify, Shade Music Plus, Youtube, youtube, Music,music, audio,opus, 32kbps,64kbps,Free ,spotify ,streaming, music-player ,  youtube-player , free-music, ytmusic">
 
   <!-- social media preview, more info https://ogp.me -->
   <meta property="og:title" content="Shade Music Plus">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://shadeappworld.github.io/music">
+  <meta property="og:url" content="https://ytify.netlify.app">
   <meta property="og:description" content="32-128kbps Opus YouTube Audio Streaming Web App.">
-  <meta property="og:image" content="/ytify_thumbnail_min.webp">
+  <meta property="og:image" content="/Shade Music Plus_thumbnail_min.webp">
 
   <!-- tells google that this url is most important (e.g. not http (without s = secure))-->
-  <link rel="canonical" href="https://shadeappworld.github.io/music/">
+  <link rel="canonical" href="https://ytify.netlify.app/">
 
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <link rel="icon" type="image/png" href="/logo192.png" sizes="192x192" />
@@ -37,12 +29,14 @@
   <link rel="apple-touch-icon" href="/logo192.png">
 
 
-  <title>Shade Music Plus - it's a new way of Music!</title>
+  <title>Shade Music Plus- discover by tapping the search button at the top.</title>
 </head>
 
 <body>
   <canvas class="hide"></canvas>
-  <audio></audio>
+  <audio>
+    <track src="subtitles.ttml" kind="subtitles" label="Expanded TTML Sample" />
+  </audio>
   <nav>
     <a href="/" id="/">
       <i class="ri-home-line"></i>
@@ -50,7 +44,7 @@
     </a>
     <a href="/upcoming" id="/upcoming">
       <i class="ri-skip-forward-line"></i>
-      <p>Playing Next</p>
+      <p>Upcoming</p>
     </a>
     <a href="/search" id="/search">
       <i class="ri-search-2-line"></i>
@@ -70,14 +64,19 @@
   </nav>
   <main>
     <section id="home">
+      <article class="hide" id="subtitleContainer"></article>
+
       <img id="img" src="/ytify_thumbnail_min.webp" height="100%" width="100%" crossorigin="anonymous"
         alt="Current Playing Media Thumbnail">
 
       <div id="metadata">
-        <a id="title" href="https://musicplus-alpha.vercel.app/settings" target="_blank">Shade Music Plus - it's a new way of Music!</a>
-        <a id="author" href="" target="_blank"></a>
+        <a id="title" href="" target="_blank">Shade Music Plus</a>
+        <a id="author" href="" target="_blank">Channel</a>
         <select id="bitrateSelector">
-          <option>Magic Audio</option>
+          <option>Magic Audio Booster</option>
+        </select>
+        <select id="subtitleSelector" class="hide">
+          <option>Subtitles</option>
         </select>
         <input type="checkbox" id="favButton" />
         <label for="favButton" class="ri-heart-line" aria-label="like"></label>
@@ -96,16 +95,24 @@
         <button>
           <i class="ri-subtract-line"></i> Remove
         </button>
+        <button>
+          <i class="ri-filter-2-line"></i> Filter >10:00
+        </button>
+        <button class="checked" id="autoQueueBtn">
+          <i class="ri-list-check-2"></i> Auto-Queue
+        </button>
       </span>
+      <br>
       <div id="queuelist">
-        <h1 align="center">Your music queue will appear here, go ahead and search for music!</h1>
+        <h1 align="center">upcoming streams show here</h1>
       </div>
     </section>
 
 
     <section id="search">
-      <span id="superInputContainer">
-        <input type="search" id="superInput" autocomplete="off" placeholder='Search or enter YT URL' />
+      <form id="superInputContainer">
+        <input type="search" id="superInput" autocomplete="off"
+          placeholder='Search or enter YT URL             CTRL+K' />
         <select id="searchFilters">
           <optgroup label="YouTube">
             <option value="all">All</option>
@@ -121,12 +128,18 @@
             <option value="music_playlists">Playlists</option>
           </optgroup>
         </select>
-        <button aria-label="search" class="ri-search-2-line"></button>
-      </span>
+      </form>
       <ul id="suggestions"></ul>
       <div id="searchlist">
-        <h1 style="background:var(--onBg);padding:4% 2%;border-radius:var(--roundness);text-align:center">
-          Playlists just for you
+        <h1 class="featuredPlaylists">
+          <svg xmlns="http://www.w3.org/2000/svg" width="3rem" height="3rem" viewBox="0 0 176 176"
+            style="transform:scale(0.7)">
+            <circle cx="88" cy="88" r="77" fill="var(--text)" />
+            <path fill="var(--bg)"
+              d="M88 46a42 42 0 1 1 0 84 42 42 0 0 1 0-84m0-4a46 46 0 1 0 0 92 46 46 0 0 0 0-92z" />
+            <path fill="var(--bg)" d="m72 111 39-24-39-22z" />
+          </svg>
+          <label>Featured Playlists</label>
         </h1>
       </div>
     </section>
@@ -150,7 +163,7 @@
 
       <details id="history">
         <summary>
-          <i class="ri-history-line"></i> History
+          <i class="ri-memories-line"></i> History
         </summary>
         <button>
           <i class="ri-close-line"></i> Clear All
@@ -192,25 +205,31 @@
       <br>
       <div>
         <label id="importBtn" for="upload">
-          <i class="ri-login-circle-line"></i> Import</label>
+          <i class="ri-import-line"></i> Import</label>
         <input type="file" id="upload" class="hide">
         <label id="exportBtn">
-          <i class="ri-logout-circle-line"></i> Export</label>
+          <i class="ri-export-line"></i> Export</label>
         <label id="cleanLibraryBtn">
-          <i class="ri-delete-bin-7-line"></i> Clean</label>
+          <i class="ri-delete-bin-2-line"></i> Clean</label>
       </div>
-      <br>
+
     </section>
 
 
     <section id="settings">
+
       <span>
-        <label for="pipedInstances">Piped Instance</label>
-        <select id="pipedInstances">
-          <option value="">Custom</option>
-          <option value="https://pipedapi.kavin.rocks" selected>kavin.rocks 🌐</option>
+        <label for="instances">Instance</label>
+        <select id="instances">
+          <option value='{
+          "name":"Custom",
+          "piped":"https://pipedapi.kavin.rocks",
+          "image":"https://pipedproxy.r4fo.com",
+          "invidious":"https://invidious.fdn.fr"
+          }'>Custom</option>
         </select>
       </span>
+
       <span>
         <label for="startupTab">
           Default Tab on Startup
@@ -222,30 +241,22 @@
         </select>
       </span>
       <span>
-        <label for="linkOrigin">Domain for links</label>
-        <select id="linkOrigin">
+        <label for="linkHost">Links host</label>
+        <select id="linkHost">
+          <option value="https://shade-app.vercel.app">Shade App Plus</option>
           <option value="https://musicplus-alpha.vercel.app">Shade Music Plus</option>
-          <option value="https://youtube.com">YouTube</option>
           <option value="https://piped.video">Piped</option>
+          <option value="https://yewtu.be">Invidious</option>
         </select>
       </span>
 
-      <toggle-switch id="apiAutoFetchSwitch" checked>Automatically Fetch Instances</toggle-switch>
-      <toggle-switch id="fullscreenSwitch">Toggle Fullscreen</toggle-switch>
-
       <h3>Search</h3>
-      <toggle-switch id="defaultFilterSongs">Filter Songs by Default</toggle-switch>
+      <toggle-switch id="featuredPlaylistsSwitch" checked>Featured Playlists</toggle-switch>
+      <toggle-switch id="defaultFilterSongs">Set YouTube Music as Default</toggle-switch>
       <toggle-switch id="suggestionsSwitch" checked>Display Suggestions</toggle-switch>
 
       <h3>Playback</h3>
-      <span>
-        <label for="invidiousInstances">Invidious Instance</label>
-        <select id="invidiousInstances">
-          <option value="">Custom</option>
-          <option value="https://invidious.fdn.fr" selected>fdn.fr 🇫🇷</option>
-        </select>
-      </span>
-      <toggle-switch id="autoQueueSwitch" checked>Auto-Queue</toggle-switch>
+
       <toggle-switch id="qualitySwitch">Highest Quality Audio</toggle-switch>
       <span>
         <label for="CodecPreference">Codec Preference</label>
@@ -257,13 +268,6 @@
       </span>
 
       <h3>Thumbnail</h3>
-      <span>
-        <label for="thumbnailProxies">Proxy</label>
-        <select id="thumbnailProxies">
-          <option value="">Custom</option>
-          <option value="https://pipedproxy.r4fo.com" selected>r4fo.com 🇩🇪</option>
-        </select>
-      </span>
       <toggle-switch id="thumbnailSwitch" checked>Load</toggle-switch>
       <toggle-switch id="lazyThumbSwitch">Lazy Loading</toggle-switch>
 
@@ -289,10 +293,11 @@
         </select>
       </span>
       <toggle-switch id="highContrastSwitch">High Contrast Theme</toggle-switch>
+      <toggle-switch id="reverseNavSwitch">Reverse Navigation</toggle-switch>
+      <toggle-switch id="fullscreenSwitch">Toggle Fullscreen</toggle-switch>
+
 
       <h3>Actions</h3>
-
-      <button id="apiRefreshBtn">Regenerate Instances</button>
 
       <button id="clearCacheBtn">Clear Caches</button>
 
@@ -318,7 +323,7 @@
     <section id="list">
       <span id="listTools">
         <button id="playAllBtn">
-          <i class="ri-play-line"></i> Play
+          <i class="ri-play-large-line"></i> Play
         </button>
         <button id="enqueueAllBtn">
           <i class="ri-list-check-2"></i> Enqueue
@@ -327,12 +332,12 @@
           <i class="ri-stack-line"></i> Save
         </button>
         <button id="openInYT">
-          <i class="ri-youtube-line"></i> Open In YouTube
+          <i class="ri-external-link-line"></i> Open In YouTube
         </button>
       </span>
       <br>
       <div id="playlist">
-        <h1>Playlists and channels will appear here, go ahead and browse for music and you'll see them here</h1>
+        <h1>playlist or channel items show here</h1>
       </div>
     </section>
 
@@ -354,7 +359,7 @@
         </button>
 
         <span id="volumeContainer">
-          <label for="volumeChanger" class="ri-volume-up-line"></label>
+          <label for="volumeChanger" class="ri-volume-up-fill"></label>
           <input type="range" min="0" max="100" value="100" id="volumeChanger">
         </span>
         <select id="playSpeed">
@@ -366,6 +371,9 @@
           <option value="1.50">1.50x</option>
           <option value="1.75">1.75x</option>
           <option value="2.00">2.00x</option>
+          <option value="2.50">2.50x</option>
+          <option value="3.00">3.00x</option>
+          <option value="3.50">3.50x</option>
           <option value="4.00">4.00x</option>
         </select>
       </div>
@@ -374,7 +382,8 @@
 
   <dialog id="superModal">
     <ul>
-      <li><i class="ri-play-line"></i>Play Now</li>
+      <li><i class="ri-play-large-line"></i>Play Now</li>
+      <li><i class="ri-skip-forward-line"></i>Play Next</li>
       <li><i class="ri-list-check-2"></i>Enqueue</li>
       <li>
         <i class="ri-play-list-add-line"></i>
@@ -385,8 +394,8 @@
           <option value="listenLater">Listen Later</option>
         </select>
       </li>
-      <li><i class="ri-rfid-line"></i>Start Radio</li>
-      <li><i class="ri-download-2-line"></i>Download</li>
+      <li><i class="ri-radio-line"></i>Start Radio</li>
+      <li><i class="ri-download-2-fill"></i>Download</li>
       <li><i class="ri-youtube-line"></i>View Channel</li>
     </ul>
   </dialog>

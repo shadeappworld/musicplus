@@ -1,12 +1,12 @@
-import { listContainer, superModal } from "../lib/dom";
+import { superModal } from "../lib/dom";
+import { createPlaylist, addToCollection } from "../lib/libraryUtils";
 import player from "../lib/player";
 import { $, fetchList, notify } from "../lib/utils";
-import { addToCollection, createPlaylist } from "./library";
 import { appendToQueuelist } from "./queue";
 
 const superModalList = <HTMLUListElement>superModal.firstElementChild;
 
-const [playNow, enqueue, li_atps, startRadio, downloadBtn, openChannelBtn] = <HTMLCollectionOf<HTMLLIElement>>superModalList.children;
+const [playNow,  playNext, enqueue, li_atps, startRadio, downloadBtn, openChannelBtn] = <HTMLCollectionOf<HTMLLIElement>>superModalList.children;
 
 export const atpSelector = <HTMLSelectElement>li_atps.lastElementChild;
 
@@ -23,11 +23,16 @@ playNow.addEventListener('click', () => {
   superModal.click();
 });
 
+playNext.addEventListener('click', () => {
+  appendToQueuelist(superModal.dataset, true);
+  superModal.click();
+});
+
+
 enqueue.addEventListener('click', () => {
   appendToQueuelist(superModal.dataset);
   superModal.click();
 });
-
 
 startRadio.addEventListener('click', async () => {
   superModal.click();
@@ -79,9 +84,8 @@ downloadBtn.addEventListener('click', () => {
 
 openChannelBtn.addEventListener('click', () => {
   // data binding for save list & open in yt btn
-  (<HTMLButtonElement>document.getElementById('openInYT')).innerHTML = '<i class="ri-youtube-line"></i> ' + <string>superModal.dataset.author;
+  (<HTMLButtonElement>document.getElementById('openInYT')).innerHTML = '<i class="ri-external-link-line"></i> ' + <string>superModal.dataset.author;
   const channelUrl = <string>superModal.dataset.channelUrl;
-  listContainer.dataset.url = channelUrl;
   fetchList(channelUrl);
   superModal.click();
 })

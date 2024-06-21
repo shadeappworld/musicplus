@@ -1,9 +1,7 @@
 import { html, render } from "lit";
-import { audio, canvas, context, img, listAnchor, listContainer, listSection, loadingScreen, openInYtBtn, pipedInstances, playAllBtn, saveListBtn, superModal, thumbnailProxies } from "./dom";
-import { removeFromCollection } from "../scripts/library";
-
-
-export const blankImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+import { audio, img, listAnchor, listContainer, listSection, loadingScreen, openInYtBtn, instanceSelector, playAllBtn, saveListBtn, subtitleContainer, subtitleTrack, superModal } from "./dom";
+import { removeFromCollection } from "./libraryUtils";
+import { blankImage, generateImageUrl, sqrThumb } from "./imageUtils";
 
 export const params = (new URL(location.href)).searchParams;
 
@@ -15,17 +13,19 @@ export const getSaved = localStorage.getItem.bind(localStorage);
 
 export const removeSaved = localStorage.removeItem.bind(localStorage);
 
-export const getDB = (): Library => JSON.parse(getSaved('library') || '{"discover":{}}');
-
-export const saveDB = (data: Library) => save('library', JSON.stringify(data));
-
-export const getCollection = (name: string) => <HTMLDivElement>(<HTMLDetailsElement>document.getElementById(name)).lastElementChild;
+export const getApi = (type: string, index: number | '' = '') => JSON.parse(index ? instanceSelector.options[index].value : instanceSelector.value)[type];
 
 export const idFromURL = (link: string | null) => link?.match(/(https?:\/\/)?((www\.)?(youtube(-nocookie)?|youtube.googleapis)\.com.*(v\/|v=|vi=|vi\/|e\/|embed\/|user\/.*\/u\/\d+\/)|youtu\.be\/)([_0-9a-z-]+)/i)?.[7];
 
-export const imgUrl = (id: string, res: string, proxy: string = thumbnailProxies.value) => `${proxy}/vi_webp/${id}/${res}.webp?host=i.ytimg.com`;
-
 export const numFormatter = (num: number): string => Intl.NumberFormat('en', { notation: 'compact' }).format(num);
+
+export const supportsOpus = (): Promise<boolean> => navigator.mediaCapabilities.decodingInfo({
+  type: 'file',
+  audio: {
+    contentType: 'audio/ogg;codecs=opus'
+  }
+}).then(res => res.supported);
+
 
 export function notify(text: string) {
   const el = $('p');
@@ -37,18 +37,9 @@ export function notify(text: string) {
   document.body.appendChild(el);
 }
 
-const linkDomain = (<HTMLSelectElement>document.getElementById('linkOrigin'));
-const savedLinkDomain = getSaved('linkDomain');
-if (savedLinkDomain) linkDomain.value = savedLinkDomain;
 
-linkDomain.addEventListener('change', () => {
-  linkDomain.selectedIndex === 0 ?
-    removeSaved('linkDomain') :
-    save('linkDomain', linkDomain.value);
-});
-
-export const domainResolver = (url: string) =>
-  linkDomain.value + (linkDomain.value.includes('ytify') ? url.
+export const hostResolver = (url: string) =>
+  linkHost.value + (linkHost.value.includes('ytify') ? url.
     startsWith('/watch') ?
     ('?s' + url.slice(8)) :
     ('/list?' + url.slice(1).split('/').join('=')) : url);
@@ -68,24 +59,19 @@ export function convertSStoHHMMSS(seconds: number): string {
     hh + ':' : '') + `${mmStr}:${ssStr}`;
 }
 
-// Square Image Generator 
-export function sqrThumb(canvasImg: HTMLImageElement) {
-  const width = canvasImg.width;
-  const height = canvasImg.height;
-  const side = Math.min(width, height);
-  canvas.width = side;
-  canvas.height = side;
-  // centre the selection
-  const offsetX = (width - side) / 2;
-  const offsetY = (height - side) / 2;
-  context.drawImage(canvasImg, offsetX, offsetY, side, side, 0, 0, side, side);
-  return canvas.toDataURL();
-}
 
+const linkHost = <HTMLSelectElement>document.getElementById('linkHost');
 
-img.onload = () => img.naturalWidth === 120 ? img.src = img.src.replace('maxres', 'mq').replace('.webp', '.jpg').replace('vi_webp', 'vi') : '';
-img.onerror = () => img.src.includes('max') ? img.src = img.src.replace('maxres', 'mq') : '';
+const savedLinkHost = getSaved('linkHost') || '';
+if (savedLinkHost)
+  linkHost.value = savedLinkHost;
 
+linkHost.addEventListener('change', () => {
+  linkHost.selectedIndex === 0 ?
+    removeSaved('linkHost') :
+    save('linkHost', linkHost.value);
+  location.reload();
+});
 
 export function setMetaData(
   id: string,
@@ -94,14 +80,14 @@ export function setMetaData(
   authorUrl: string,
   music: boolean = false
 ) {
-  const imgX = imgUrl(id, 'maxresdefault');
+  const imgX = generateImageUrl(id, 'maxresdefault');
   if (!getSaved('img') && !music)
     img.src = imgX;
 
   img.alt = streamName;
 
   const title = <HTMLAnchorElement>document.getElementById('title');
-  title.href = `https://youtube.com/watch?v=${id}`;
+  title.href = hostResolver(`/watch?v=${id}`);
   title.textContent = streamName;
   title.onclick = _ => {
     _.preventDefault();
@@ -160,7 +146,7 @@ export function fetchList(url: string, mix = false) {
 
   loadingScreen.showModal();
 
-  fetch(pipedInstances.value + url)
+  fetch(getApi('piped') + url)
     .then(res => res.json())
     .then(group => {
       listContainer.innerHTML = '';
@@ -187,18 +173,35 @@ export function fetchList(url: string, mix = false) {
       if (!mix && token)
         setObserver(async () => {
           const data = await fetch(
-            pipedInstances.value + '/nextpage/' +
+            getApi('piped') + '/nextpage/' +
             url.substring(1) + '?nextpage=' + encodeURIComponent(token)
           )
             .then(res => res.json())
             .catch(e => console.log(e));
           if (!data) return;
-          listContainer.appendChild(itemsLoader(data.relatedStreams));
+          const existingItems: string[] = [];
+          for (const item of listContainer.children)
+            existingItems.push((<HTMLAnchorElement>item).href.slice(-11))
+
+          listContainer.appendChild(
+            itemsLoader(
+              data.relatedStreams.filter(
+                (item: StreamItem) => !existingItems.includes(
+                  item.url.slice(-11))
+              )
+            )
+          );
           return data.nextpage;
         });
 
-      openInYtBtn.innerHTML = '<i class="ri-youtube-line"></i> ' + group.name;
-      saveListBtn.innerHTML = `<i class="ri-stack-line"></i> ${url.includes('channel') ? 'Subscribe' : 'Save'}`;
+      const type = url.includes('channel') ? 'channel' : 'playlist';
+
+      openInYtBtn.innerHTML = '<i class="ri-external-link-line"></i> ' + group.name;
+      saveListBtn.innerHTML = `<i class="ri-stack-line"></i> ${type === 'channel' ? 'Subscribe' : 'Save'}`;
+      saveListBtn.dataset.url = url;
+      saveListBtn.dataset.thumbnail = group.avatarUrl;
+      saveListBtn.dataset.type = type;
+      saveListBtn.dataset.name = group.name;
 
       if (mix) playAllBtn.click();
       else {
@@ -209,17 +212,18 @@ export function fetchList(url: string, mix = false) {
             .join('=')
             .substring(1)
         );
+        listContainer.dataset.url = url;
         document.title = group.name + ' - ytify';
       }
     })
     .catch(err => {
-      if (err.message !== 'No Data Found' && pipedInstances.selectedIndex < pipedInstances.length - 1) {
-        pipedInstances.selectedIndex++;
+      if (err.message !== 'No Data Found' && instanceSelector.selectedIndex < instanceSelector.length - 1) {
+        instanceSelector.selectedIndex++;
         fetchList(url, mix);
         return;
       }
       notify(mix ? 'No Mixes Found' : err.message);
-      pipedInstances.selectedIndex = 0;
+      instanceSelector.selectedIndex = 0;
     })
     .finally(() => loadingScreen.close());
 }
@@ -248,28 +252,40 @@ export function itemsLoader(itemsArray: StreamItem[]) {
       data-channel_url=${stream.uploaderUrl}
   />`;
 
-  function rmDomain(url: string) {
-    if (!url) return;
-    if (!url.startsWith('https')) return url;
-    const l = new URL(url.replace(/&qhash=.{8}$/, ''));
-    return l.pathname + l.search;
+  function getThumbIdFromLink(url: string) {
+    // for featured playlists
+    if (url.startsWith('/')) return url;
+
+    const l = new URL(url);
+    const p = l.pathname;
+
+    return l.search.includes('ytimg') ?
+      p.split('/')[2] :
+      p.split('=')[0];
   }
 
   const listItem = (item: StreamItem) => html`<list-item
       title=${item.name}
-      thumbnail=${rmDomain(item.thumbnail)}
-      uploader_data=${item.description || item.uploaderName}
-      stats=${item.subscribers > 0 ?
+      thumbnail=${!getSaved('img') && item.thumbnail ?
+      generateImageUrl(
+        getThumbIdFromLink(
+          item.thumbnail
+        )
+      ) : blankImage
+    }
+    uploader_data = ${item.description || item.uploaderName}
+    stats = ${item.subscribers > 0 ?
       (numFormatter(item.subscribers) + ' subscribers') :
-      (item.videos > 0 ? item.videos + ' streams' : '')}
-      type=${item.type}
-      url=${item.url}
-  />`;
+      (item.videos > 0 ? item.videos + ' streams' : '')
+    }
+    type = ${item.type}
+    url = ${item.url}
+    />`;
 
   const fragment = document.createDocumentFragment();
 
   render(html`${itemsArray.map(item =>
-    html`<a href=${domainResolver(item.url)}>
+    html`<a href=${hostResolver(item.url)}>
     ${item.type !== 'stream' ?
         listItem(item) :
         streamItem(item)}
@@ -279,6 +295,8 @@ export function itemsLoader(itemsArray: StreamItem[]) {
   return fragment;
 }
 
+
+// TLDR : Stream Item Click Action
 export function superClick(e: Event) {
   e.preventDefault();
   const elem = e.target as HTMLElement;
@@ -309,7 +327,51 @@ export function superClick(e: Event) {
         url.replace('?list=', 's/') :
         url
     );
-    // data binding for open channel action
-    listContainer.dataset.url = url;
   }
+}
+
+
+export async function parseTTML() {
+
+  const imsc = await import('imsc/dist/imsc.all.min.js');
+
+  const myTrack = audio.textTracks[0];
+  myTrack.mode = "hidden";
+  const d = img.getBoundingClientRect();
+
+  subtitleContainer.style.top = Math.floor(d.y) + 'px';
+  subtitleContainer.style.left = Math.floor(d.x) + 'px';
+
+
+  fetch(subtitleTrack.src)
+    .then(res => res.text())
+    .then(text => {
+
+      const imscDoc = imsc.fromXML(text);
+      const timeEvents = imscDoc.getMediaTimeEvents();
+      const telen = timeEvents.length;
+
+      for (let i = 0; i < telen; i++) {
+        const myCue = new VTTCue(timeEvents[i], (i < telen - 1) ? timeEvents[i + 1] : audio.duration, '');
+
+        myCue.onenter = () => {
+          const subtitleActive = subtitleContainer.firstChild;
+          if (subtitleActive)
+            subtitleContainer.removeChild(subtitleActive);
+          imsc.renderHTML(
+            imsc.generateISD(imscDoc, myCue.startTime),
+            subtitleContainer,
+            img,
+            Math.floor(d.height),
+            Math.floor(d.width)
+          );
+        }
+        myCue.onexit = () => {
+          const subtitleActive = subtitleContainer.firstChild;
+          if (subtitleActive)
+            subtitleContainer.removeChild(subtitleActive)
+        }
+        myTrack.addCue(myCue);
+      }
+    });
 }
