@@ -1,39 +1,18 @@
-import { instanceSelector } from "../lib/dom";
-import { quickSwitch, removeSaved, save } from "../lib/utils";
-import { store, getSaved } from "../store";
+import { audio, instanceSelector } from "../lib/dom";
+import player from "../lib/player";
+import { getSaved, removeSaved, save } from "../lib/utils";
 
+const unifiedInstancesAPIurl = 'https://raw.githubusercontent.com/wiki/n-ce/ytify/unified_instances.md';
 
-const hlsOn = store.player.HLS;
-
-const instanceAPIurl = hlsOn ? 'https://piped-instances.kavin.rocks' : 'https://raw.githubusercontent.com/n-ce/Uma/main/unified_instances.txt';
-
-fetch(instanceAPIurl)
-  .then(res => hlsOn ? res.json() : res.text())
-  .then(text => {
-
-    const json = hlsOn ?
-      text.map((v: Record<'name' | 'locations' | 'api_url' | 'image_proxy_url', string>) => ({
-        name: `${v.name} ${v.locations}`,
-        piped: v.api_url,
-        invidious: 'https://invidious.fdn.fr'
-      })) :
-      text.split('\n\n').map((v: string) => {
-        const [name, flag, pi, iv] = v.split(', ');
-        return {
-          name: `${name} ${flag}`,
-          piped: `https://${pi}.${name}`,
-          invidious: `https://${iv}.${name}`
-        }
-      });
-
-
+fetch(unifiedInstancesAPIurl)
+  .then(res => res.text())
+  .then(text => JSON.parse(text.slice(3)))
+  .then((json: { [index: string]: string }[]) => {
     // add to DOM
-    for (const api of json) {
-      instanceSelector.add(new Option(api.name));
-      store.api.push(api);
-    }
+    for (const api of json)
+      instanceSelector.add(new Option(api.name, JSON.stringify(api)))
 
-    const savedApi = getSaved('apiList_5');
+    const savedApi = getSaved('apiList_3');
 
     if (!savedApi) {
       instanceSelector.selectedIndex = 1;
@@ -41,38 +20,49 @@ fetch(instanceAPIurl)
     }
 
     const api = JSON.parse(savedApi);
-    const names = json.map((v: { name: string }) => v.name);
-    const index = names.findIndex((v: { name: string }) => v === api.name);
+    const names = json.map(v => v.name);
+    const index = names.findIndex(v => v === api.name);
 
     if (index >= 0)
       instanceSelector.selectedIndex = index + 1;
     else {
-      instanceSelector.options[0].textContent = api.name;
-      store.api[0] = api;
-
+      const custom = instanceSelector.options[0];
+      custom.textContent = api.name;
+      custom.value = savedApi;
     }
+
   });
 
 instanceSelector.addEventListener('change', async () => {
   const index = instanceSelector.selectedIndex;
-  const current = store.api[index];
-
   if (index === 0) {
-
     const n = prompt('Enter Name of your instance :');
-    const p = prompt('Enter Piped API URL :', current.piped)
-
+    const p = prompt('Enter Piped API URL :')
+    const t = prompt('Enter Piped Proxy URL (OPTIONAL) :');
+    const i = prompt('Enter Invidious API URL (OPTIONAL) : ')
+    const current = JSON.parse(instanceSelector.value);
     if (n)
-      current.name = instanceSelector.options[0].textContent = n;
+      current.name = n;
     if (p)
       current.piped = p;
-
-    save('apiList_5', JSON.stringify(current));
-
+    if (t)
+      current.image = t;
+    if (i)
+      current.invidious = i;
+    save('apiList_3', JSON.stringify(current));
+    return;
   }
-  else index === 1 ?
-    removeSaved('apiList_5') :
-    save('apiList_5', JSON.stringify(current));
 
-  quickSwitch();
+  index === 1 ?
+    removeSaved('apiList_3') :
+    save('apiList_3', instanceSelector.value);
+
+  if (audio.dataset.playbackState !== 'playing') return;
+
+  audio.pause();
+  const timeOfSwitch = audio.currentTime;
+  await player(audio.dataset.id);
+  audio.currentTime = timeOfSwitch;
 });
+
+

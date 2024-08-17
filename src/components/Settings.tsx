@@ -65,7 +65,7 @@ export default function Settings() {
     <>
       <div>
         <b id="ytifyIconContainer">
-          <p>Shade Music Plus {Version}</p>
+          <p>ytify {Version}</p>
         </b>
 
         <span id='instanceSelectorContainer'>

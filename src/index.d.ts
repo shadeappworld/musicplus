@@ -8,7 +8,6 @@ declare global {
     }
   }
 
-
   type StreamItem = {
     url: string,
     type: string,
@@ -28,14 +27,6 @@ declare global {
     uploadedDate: string,
     uploaderName: string,
     uploaderAvatar: string,
-    /* invidious fields */
-    lengthSeconds: number,
-    publishedText: string,
-    viewCountText: string,
-    viewCount: number,
-    authorUrl: string,
-    videoId: string,
-    author: string
   }
 
   type CollectionItem = {
@@ -46,6 +37,19 @@ declare global {
     channelUrl: string,
     frequency?: number
   }
+
+  type Recommendation = {
+    duration: number,
+    url: string,
+    title: string,
+    uploaderUrl: string,
+    uploaderName: string,
+    type: string,
+    author: string,
+    authorUrl: string,
+    lengthSeconds: number,
+    videoId: string
+  };
 
   type Library = {
     [index: string]: {

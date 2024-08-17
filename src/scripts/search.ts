@@ -1,11 +1,13 @@
-import { instanceSelector, loadingScreen, searchFilters, searchlist, superInput } from "../lib/dom";
+import { instanceSelector, loadingScreen, searchFilters, superInput } from "../lib/dom";
 import player from "../lib/player";
-import { $, getApi, itemsLoader, idFromURL, notify, superClick } from "../lib/utils";
-import { store, params, getSaved } from "../store";
-import { fetchResultsWithInvidious } from "./search.invidious";
+import { $, getSaved, getApi, save, itemsLoader, idFromURL, params, notify, removeSaved, superClick } from "../lib/utils";
+import { ytmPlsSwitch } from "./settings";
 
-
+const searchlist = <HTMLDivElement>document.getElementById('searchlist');
 const suggestions = <HTMLUListElement>document.getElementById('suggestions');
+const suggestionsSwitch = <HTMLSelectElement>document.getElementById('suggestionsSwitch');
+
+
 let nextPageToken = '';
 
 const loadMoreResults = (token: string, query: string) =>
@@ -15,9 +17,6 @@ const loadMoreResults = (token: string, query: string) =>
 
 
 function setObserver(callback: () => Promise<string>) {
-
-  const items = searchlist.childElementCount;
-
   new IntersectionObserver((entries, observer) =>
     entries.forEach(async e => {
       if (e.isIntersecting) {
@@ -25,22 +24,72 @@ function setObserver(callback: () => Promise<string>) {
         observer.disconnect();
         setObserver(callback);
       }
-    })).observe(searchlist.children[items - (items > 5 ? 5 : 1)]);
+    })).observe(searchlist.children[searchlist.childElementCount - 5]);
 }
 
-const fetchResultsWithPiped = (query: string) =>
+
+// Get search results of input
+function searchLoader() {
+
+  const text = superInput.value;
+  const searchQuery = '?q=' + superInput.value;
+  const filterQuery = '&filter=' + searchFilters.value;
+  const query = 'search' + searchQuery + filterQuery;
+  const sortByTime = searchFilters.selectedIndex === 1;
+
+  superInput.dataset.query = searchQuery + (filterQuery.includes('all') ? '' : filterQuery);
+  searchlist.innerHTML = '';
+
+  if (!text) {
+    insertYtmPls();
+    history.replaceState({}, '', location.origin + location.pathname);
+    return
+  }
+
+  loadingScreen.showModal();
+
   fetch(getApi('piped') + '/' + query)
     .then(res => res.json())
     .then(async (searchResults) => {
-      const items = searchResults.items;
+      let items = searchResults.items;
       nextPageToken = searchResults.nextpage;
       if (!items) throw new Error('Search couldn\'t be resolved on ' + getApi('piped'));
 
+      if (sortByTime && nextPageToken) {
+        for (let i = 0; i < 3; i++) {
+          const data = await loadMoreResults(nextPageToken, query.substring(7));
+          if (!data)
+            throw new Error('nextpage error');
 
-      // filter out shorts
-      searchlist.appendChild(itemsLoader(
-        items.filter((item: StreamItem) => !item.isShort)
-      ));
+          nextPageToken = data.nextpage;
+          items = items.concat(data.items);
+        }
+
+        type u = StreamItem & {
+          uploaded: number
+        }
+        items = (<u[]>items)
+          .filter(i => i.type === 'stream')
+          .sort((a, b) => b.uploaded - a.uploaded);
+
+        const uniqueSet = new Set(items);
+        items = Array.from(uniqueSet);
+
+        // Deduplication algorithm taken from https://www.techiediaries.com/find-duplicate-objects-in-array-angular
+
+        items = items.reduce((acc: any, item: any) => {
+          if (!acc.some((obj: any) => obj.uploaded === item.uploaded))
+            acc.push(item);
+          return acc;
+        }, []);
+
+      }
+
+      // filter livestreams & shorts & append rest
+      searchlist.appendChild(
+        itemsLoader(
+          items.filter((item: StreamItem) => !item.isShort && item.duration !== -1)
+        ));
       // load more results when 3rd last element is visible
 
       setObserver(async () => {
@@ -62,34 +111,10 @@ const fetchResultsWithPiped = (query: string) =>
       }
       notify(err.message);
       instanceSelector.selectedIndex = 0;
-    });
+    })
+    .finally(() => loadingScreen.close());
 
-
-// Get search results of input
-function searchLoader() {
-
-  const searchQuery = '?q=' + superInput.value;
-  const filterQuery = '&filter=' + searchFilters.value;
-  const query = 'search' + searchQuery + filterQuery;
-  const sortResults = searchFilters.selectedIndex > 7;
-
-  store.searchQuery = searchQuery + (filterQuery.includes('all') ? '' : filterQuery);
-  searchlist.innerHTML = '';
-
-  if (!superInput.value) {
-    history.replaceState({}, '', location.origin + location.pathname);
-    return
-  }
-
-
-  loadingScreen.showModal();
-
-  (sortResults ?
-    fetchResultsWithInvidious(superInput.value, searchFilters.value) :
-    fetchResultsWithPiped(query)
-  ).finally(() => loadingScreen.close());
-
-  history.replaceState({}, '', location.origin + location.pathname + store.searchQuery.replace('filter', 'f'));
+  history.replaceState({}, '', location.origin + location.pathname + superInput.dataset.query.replace('filter', 'f'));
   suggestions.style.display = 'none';
 
 }
@@ -109,12 +134,11 @@ superInput.addEventListener('input', async () => {
     prevID = id;
     return;
   }
-  if (getSaved('search_suggestions')) return;
 
   suggestions.innerHTML = '';
   suggestions.style.display = 'none';
 
-  if (text.length < 3) return;
+  if (text.length < 3 || getSaved('search_suggestions')) return;
 
   suggestions.style.display = 'block';
 
@@ -148,9 +172,8 @@ superInput.addEventListener('keydown', _ => {
     _.preventDefault();
   }
   if (_.key === 'Backspace' ||
-    getSaved('search_suggestions') ||
-    !suggestions.hasChildNodes()
-  ) return;
+    !suggestions.hasChildNodes() ||
+    getSaved('search_suggestions')) return;
 
   suggestions.childNodes.forEach(node => {
     if ((<HTMLLIElement>node).classList.contains('hover'))
@@ -176,31 +199,59 @@ superInput.addEventListener('keydown', _ => {
 });
 
 // CTRL + K focus search bar
-document.addEventListener('keydown', (event) => {
+document.addEventListener("keydown", function(event) {
   if (event.ctrlKey && event.key === "K")
     superInput.focus();
 });
+
 
 searchlist.addEventListener('click', superClick);
 
 searchFilters.addEventListener('change', searchLoader);
 
+suggestionsSwitch.addEventListener('click', () => {
+  getSaved('searchSuggestions') ?
+    removeSaved('searchSuggestions') :
+    save('searchSuggestions', 'off');
+  suggestions.style.display = 'none';
+
+});
+
 if (getSaved('searchSuggestions'))
-  suggestions.remove();
-
-const savedSearchFilter = getSaved('searchFilter');
-if (savedSearchFilter)
-  searchFilters.value = savedSearchFilter;
-
+  suggestionsSwitch.removeAttribute('checked')
 
 
 // search param /?q=
-addEventListener('DOMContentLoaded', () => {
-  if (params.has('q')) {
-    superInput.value = params.get('q') || '';
-    if (params.has('f'))
-      searchFilters.value = params.get('f') || '';
-    searchLoader();
-  }
-});
 
+if (params.has('q')) {
+  superInput.value = params.get('q') || '';
+  if (params.has('f'))
+    searchFilters.value = params.get('f') || '';
+  searchLoader();
+}
+
+// YouTube Music Featured Playlists
+
+
+function insertYtmPls() {
+
+  if (ytmPlsSwitch.hasAttribute('checked'))
+    fetch('https://raw.githubusercontent.com/wiki/n-ce/ytify/ytm_pls.md')
+      .then(res => res.text())
+      .then(text => text.split('\n'))
+      .then(data => {
+        const array = [];
+        for (let i = 0; i < data.length; i += 4)
+          array.push(<StreamItem>{
+            "type": "playlist",
+            "name": data[i + 1],
+            "uploaderName": "YouTube Music",
+            "url": '/playlists/' + data[i + 2],
+            "thumbnail": '/' + data[i + 3]
+          });
+
+        searchlist.appendChild(itemsLoader(array));
+      });
+}
+
+if (!params.has('q')) insertYtmPls();
