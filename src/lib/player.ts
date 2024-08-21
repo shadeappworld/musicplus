@@ -1,139 +1,101 @@
-import { audio, favButton, favIcon, playButton, instanceSelector, subtitleSelector, subtitleTrack, subtitleContainer } from "./dom";
-import { convertSStoHHMMSS, notify, params, parseTTML, removeSaved, save, setMetaData, supportsOpus, getApi, getSaved } from "./utils";
+import { audio, favButton, favIcon, playButton, subtitleSelector, subtitleTrack, subtitleContainer, listAnchor, instanceSelector, bitrateSelector } from "./dom";
+import { convertSStoHHMMSS, notify, parseTTML, setMetaData, getApi, goTo } from "./utils";
 import { autoQueue } from "../scripts/audioEvents";
 import { getDB, addListToCollection } from "./libraryUtils";
+import { params, store, getSaved } from "../store";
+import { fetchWithInvidious } from "../scripts/fetchWithInvidious";
 
 
-const codecSelector = <HTMLSelectElement>document.getElementById('CodecPreference');
-const bitrateSelector = <HTMLSelectElement>document.getElementById('bitrateSelector');
-
-/////////////////////////////////////////////////////////////
-
-codecSelector.addEventListener('change', async () => {
-  const i = codecSelector.selectedIndex;
-  i ?
-    save('codec', String(i)) :
-    removeSaved('codec');
-
-  audio.pause();
-  const timeOfSwitch = audio.currentTime;
-  await player(audio.dataset.id);
-  audio.currentTime = timeOfSwitch;
-});
-
-
-const codecSaved = getSaved('codec');
-setTimeout(async () => {
-  codecSelector.selectedIndex = codecSaved ?
-    parseInt(codecSaved) :
-    (await supportsOpus() ? 0 : 1)
-});
-
-
-
-/////////////////////////////////////////////////////////////
-
-bitrateSelector.addEventListener('change', () => {
-  const timeOfSwitch = audio.currentTime;
-  audio.src = bitrateSelector.value;
-  audio.currentTime = timeOfSwitch;
-  audio.play();
-});
-
-/////////////////////////////////////////////////////////////
 
 subtitleSelector.addEventListener('change', () => {
   subtitleTrack.src = subtitleSelector.value;
-  subtitleSelector.value ?
-    subtitleContainer.classList.remove('hide') :
+  if (subtitleSelector.selectedIndex > 0) {
+    subtitleContainer.classList.remove('hide')
+    parseTTML();
+  } else {
     subtitleContainer.classList.add('hide');
-  parseTTML();
+    subtitleContainer.style.top = '0';
+    subtitleContainer.style.left = '0';
+    subtitleSelector.parentElement!.style.position = 'relative';
+    subtitleSelector.style.top = '0'
+    subtitleSelector.style.left = '0';
+  }
 });
 
 /////////////////////////////////////////////////////////////
 
-export default async function player(id: string | null = '') {
+function setAudioStreams(audioStreams: {
+  codec: string,
+  url: string,
+  quality: string,
+  bitrate: string,
+  contentLength: number,
+  mimeType: string,
+}[],
+  isMusic = false,
+  isLive = false,
+  isCustomInstance = false) {
 
-  if (!id) return;
-  if (instanceSelector.selectedIndex === 0)
-    return import("./player.invidious").then(mod => mod.default(id))
-
-  playButton.classList.replace(playButton.className, 'ri-loader-3-line');
-
-  const apiIndex = instanceSelector.selectedIndex;
-  const apiUrl = getApi('piped', apiIndex);
-
-  const data = await fetch(apiUrl + '/streams/' + id)
-    .then(res => res.json())
-    .catch(err => {
-      if (apiIndex < instanceSelector.length - 1) {
-        notify(`switched playback instance from ${apiUrl} to ${getApi('piped', apiIndex + 1)} due to error: ${err.message}`);
-        instanceSelector.selectedIndex++;
-        player(id);
-        return;
-      }
-      notify(err.message);
-      playButton.classList.replace(playButton.className, 'ri-stop-circle-fill');
-      instanceSelector.selectedIndex = 0;
-    });
-
-  if (!data?.audioStreams?.length)
-    return notify('No audio streams available');
-
-  const audioStreams = data.audioStreams
-    .sort((a: { bitrate: number }, b: { bitrate: number }) => (a.bitrate - b.bitrate));
-
+  const preferedCodec = store.player.codec;
   const noOfBitrates = audioStreams.length;
+  let index = -1;
 
   if (!noOfBitrates) {
-    notify('NO AUDIO STREAMS AVAILABLE.');
+    notify(
+      isLive ?
+        'Turn on HLS to listen to LiveStreams!' :
+        'No Audio Streams Found.'
+    );
     playButton.classList.replace(playButton.className, 'ri-stop-circle-fill');
     return;
   }
 
-  const preferedCodec = codecSelector.value;
-  let index = -1;
+  function proxyHandler(url: string) {
+    const proxyViaPiped = isCustomInstance || (getSaved('proxyViaInvidious') === 'false');
+    const useProxy = isMusic || getSaved('enforceProxy');
+
+    // use the default proxy url
+    if (proxyViaPiped && useProxy) return url;
+
+    const oldUrl = new URL(url);
+
+    const host = useProxy ? getApi('invidious') : `https://${oldUrl.searchParams.get('host')}`;
+
+    return url.replace(oldUrl.origin, host);
+  }
 
   bitrateSelector.innerHTML = '';
-
-  audioStreams.forEach((_: {
-    codec: string,
-    url: string,
-    quality: string,
-    bitrate: string,
-  }, i: number) => {
+  audioStreams.forEach((_, i: number) => {
     const codec = _.codec === 'opus' ? 'opus' : 'aac';
-
-    const oldUrl = new URL(_.url);
-
-    const newUrl = _.url.replace(oldUrl.origin, getApi('invidious'));
+    const size = (_.contentLength / (1024 * 1024)).toFixed(2) + ' MB';
 
     // add to DOM
-    bitrateSelector.add(new Option(`${_.quality} ${codec}`, newUrl));
+    bitrateSelector.add(new Option(`${_.quality} ${codec} - ${size}`, proxyHandler(_.url)));
 
-
+    (<HTMLOptionElement>bitrateSelector?.lastElementChild).dataset.type = _.mimeType;
     // find preferred bitrate
     const codecPref = preferedCodec ? codec === preferedCodec : true;
-    const hqPref = getSaved('hq') ? noOfBitrates : 0;
+    const hqPref = store.player.hq ? noOfBitrates : 0;
     if (codecPref && index < hqPref) index = i;
   });
 
 
   bitrateSelector.selectedIndex = index;
   audio.src = bitrateSelector.value;
+}
+
+function setSubtitles(subtitles: Record<'name' | 'url', string>[]) {
 
   // Subtitle data dom injection
 
-  for (const option of subtitleSelector.options)
-    if (option.textContent !== 'Subtitles') option.remove();
-
   subtitleSelector.classList.remove('hide');
+  subtitleSelector.innerHTML = '<option>Subtitles</option>'
   subtitleContainer.innerHTML = '';
 
-  if (data.subtitles.length)
-    for (const subtitles of data.subtitles)
+  if (subtitles.length)
+    for (const subtitle of subtitles)
       subtitleSelector.add(
-        new Option(subtitles.name, subtitles.url)
+        new Option(subtitle.name, subtitle.url)
       );
   else {
     subtitleTrack.src = '';
@@ -141,35 +103,72 @@ export default async function player(id: string | null = '') {
     subtitleSelector.classList.add('hide');
     subtitleContainer.firstChild?.remove();
   }
+}
+
+export default async function player(id: string | null = '') {
+
+  if (!id) return;
+
+  playButton.classList.replace(playButton.className, 'ri-loader-3-line');
+
+  const apiIndex = instanceSelector.selectedIndex;
+  const fetchViaIV = getSaved('fetchViaIV');
+  const apiUrl = store.api[apiIndex][fetchViaIV ? 'invidious' : 'piped'];
+  const fetchWithPiped = (id: string) =>
+    fetch(apiUrl + '/streams/' + id)
+      .then(res => res.json())
+      .then(data => {
+        if ('audioStreams' in data)
+          return data;
+        else throw new Error(data.message);
+      });
+
+  const data = await (
+    fetchViaIV ?
+      fetchWithInvidious(id, apiUrl) :
+      fetchWithPiped(id)
+  ).catch(err => {
+    if (apiIndex < instanceSelector.length - 1) {
+      notify(`switched instance from ${apiUrl} to ${getApi(fetchViaIV ? 'invidious' : 'piped', apiIndex + 1)} due to error: ${err.message}`);
+      instanceSelector.selectedIndex++;
+      player(id);
+      return;
+    }
+    notify(err.message);
+    playButton.classList.replace(playButton.className, 'ri-stop-circle-fill');
+    instanceSelector.selectedIndex = 1;
+  });
+
+  if (!data) return;
+
+  store.stream.id = id;
+  store.stream.title = data.title;
+  store.stream.author = data.uploader;
+  store.stream.duration = convertSStoHHMMSS(data.duration);
+  store.stream.channelUrl = data.uploaderUrl;
 
 
-  // remove ' - Topic' from name if it exists
+  setMetaData(store.stream);
 
-  let music = false;
-  if (data.uploader.endsWith(' - Topic')) {
-    music = true;
-    data.uploader = data.uploader.replace(' - Topic', '');
-  }
+  const h = store.player.HLS;
+  h ?
+    h.loadSource(data.hls) :
+    setAudioStreams(
+      data.audioStreams.sort(
+        (a: { bitrate: number }, b: { bitrate: number }) => (a.bitrate - b.bitrate)
+      ),
+      data.category === 'Music',
+      data.livestream,
+      apiIndex === 0
+    );
 
-  setMetaData(
-    id,
-    data.title,
-    data.uploader,
-    data.uploaderUrl,
-    music
-  );
+  setSubtitles(data.subtitles);
 
 
   params.set('s', id);
 
   if (location.pathname === '/')
     history.replaceState({}, '', location.origin + '?s=' + params.get('s'));
-
-  audio.dataset.id = id;
-  audio.dataset.title = data.title;
-  audio.dataset.author = data.uploader;
-  audio.dataset.duration = convertSStoHHMMSS(data.duration);
-  audio.dataset.channelUrl = data.uploaderUrl;
 
 
   // favbutton state
@@ -186,7 +185,7 @@ export default async function player(id: string | null = '') {
   }
 
 
-  if (getSaved('autoQueue') !== 'off')
+  if (getSaved('autoQueue') === 'on')
     autoQueue(data.relatedStreams);
 
   if (getSaved('discover') === 'off') return;
@@ -194,12 +193,12 @@ export default async function player(id: string | null = '') {
   // related streams data injection as discovery data after 10 seconds
 
   setTimeout(() => {
-    if (id !== audio.dataset.id) return;
+    if (id !== store.stream.id) return;
 
     const db = getDB();
     if (!db.hasOwnProperty('discover')) db.discover = {};
-    data.relatedStreams.forEach(
-      (stream: Recommendation) => {
+    data.relatedStreams?.forEach(
+      (stream: StreamItem) => {
         if (
           stream.type !== 'stream' ||
           stream.duration < 100 || stream.duration > 3000) return;
@@ -242,5 +241,11 @@ export default async function player(id: string | null = '') {
 
     // convert the new merged+randomized discover back to object and inject it
     addListToCollection('discover', Object.fromEntries(array), db);
+
+    // just in case we are already in the discover collection 
+    if (listAnchor.classList.contains('view') && params.get('collection') === 'discover')
+      goTo('discover');
+
+
   }, 20000);
 }

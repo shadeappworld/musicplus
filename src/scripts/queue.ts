@@ -1,64 +1,75 @@
-import { $, removeSaved, save } from "../lib/utils";
-import { queuelist, upcomingBtn } from "../lib/dom";
+import { goTo, removeSaved, save } from "../lib/utils";
+import { queuelist } from "../lib/dom";
 import player from "../lib/player";
-// import Sortable from "sortablejs";
+import StreamItem from "../components/StreamItem";
+import { render } from "solid-js/web";
+import { store, getSaved } from "../store";
 
-const queueArray: string[] = [];
-
+const queueArray = store.queue.array;
 const [
   clearQBtn,
   shuffleQBtn,
   removeQBtn,
-  filterG10Btn,
+  filterLT10Btn,
   autoQueueBtn
 ] = (<HTMLSpanElement>document.getElementById('queuetools')).children as HTMLCollectionOf<HTMLButtonElement>;
 
 export const firstItemInQueue = () => <HTMLElement>queuelist.firstElementChild;
 
-export function appendToQueuelist(data: DOMStringMap, prepend: boolean = false) {
+export function appendToQueuelist(data: DOMStringMap | CollectionItem, prepend: boolean = false) {
   if (!data.id) return;
 
   if (queueArray.includes(data.id)) return;
 
-  if (filterG10Btn.classList.contains('filter'))
+  if (filterLT10Btn.classList.contains('filter'))
     if (isLongerThan10Min(<string>data.duration))
       return;
 
   if (firstItemInQueue()?.matches('h1')) firstItemInQueue().remove();
 
-  if (removeQBtn.classList.contains('delete')) removeQBtn.click();
+  if (removeQBtn.classList.contains('delete'))
+    removeQBtn.click();
 
   prepend ?
     queueArray.unshift(data.id) :
     queueArray.push(data.id);
 
-  const queueItem = $('stream-item');
-  queueItem.dataset.title = <string>data.title;
-  queueItem.dataset.author = data.author;
-  queueItem.dataset.duration = data.duration;
-  queueItem.dataset.id = data.id;
+
+  const fragment = document.createDocumentFragment();
+
+  render(() => StreamItem({
+    id: data.id || '',
+    title: data.title || '',
+    author: data.author || '',
+    duration: data.duration || '',
+    draggable: true
+  }), fragment);
 
   prepend ?
-    queuelist.prepend(queueItem) :
-    queuelist.appendChild(queueItem);
+    queuelist.prepend(fragment) :
+    queuelist.appendChild(fragment);
 
 }
 
 
-//new Sortable(queuelist, {});
-
 queuelist.addEventListener('click', e => {
-  const queueItem = e.target as HTMLElement;
-  if (!queueItem.matches('stream-item')) return;
+
+  e.preventDefault();
+
+  const queueItem = e.target as HTMLAnchorElement;
+  if (!queueItem.classList.contains('streamItem')) return;
   const id = queueItem.dataset.id || '';
-  if (queueItem.classList.contains('delete')) {
-    const trashHistory = sessionStorage.getItem('trashHistory');
-    sessionStorage.setItem('trashHistory', trashHistory + id);
-  } else player(id);
+  queueItem.classList.contains('delete') ?
+    sessionStorage.setItem(
+      'trashHistory',
+      sessionStorage.getItem('trashHistory') + id
+    ) : player(id);
 
   const index = queueArray.indexOf(id);
 
+
   queueArray.splice(index, 1);
+
   queuelist.children[index].remove();
 });
 
@@ -66,11 +77,11 @@ queuelist.addEventListener('click', e => {
 // clones any list items from the provided container to queue
 
 export function listToQ(container: HTMLDivElement) {
-  const items = container.querySelectorAll('stream-item') as NodeListOf<HTMLElement>;
+  const items = container.querySelectorAll('.streamItem') as NodeListOf<HTMLElement>;
   items.forEach(item => {
     appendToQueuelist(item.dataset);
   });
-  upcomingBtn.click();
+  goTo('/upcoming');
 }
 
 export function clearQ() {
@@ -93,7 +104,7 @@ shuffleQBtn.addEventListener('click', () => {
 });
 
 removeQBtn.addEventListener('click', () => {
-  queuelist.querySelectorAll('stream-item').forEach(el => {
+  queuelist.querySelectorAll('.streamItem').forEach(el => {
     el.classList.toggle('delete')
   });
   removeQBtn.classList.toggle('delete');
@@ -102,14 +113,14 @@ removeQBtn.addEventListener('click', () => {
 
 
 
-filterG10Btn.addEventListener('click', () => {
+filterLT10Btn.addEventListener('click', () => {
 
-  filterG10Btn.classList.toggle('filter');
+  filterLT10Btn.classList.toggle('filter');
   // Prevent Queue Conflicts
   if (removeQBtn.classList.contains('delete'))
     removeQBtn.click();
 
-  const items = queuelist.querySelectorAll('stream-item') as NodeListOf<HTMLElement>;
+  const items = queuelist.querySelectorAll('.streamItem') as NodeListOf<HTMLElement>;
   items.forEach(el => {
     const duration = el.dataset.duration as string
     if (!isLongerThan10Min(duration))
@@ -123,14 +134,13 @@ filterG10Btn.addEventListener('click', () => {
 
 autoQueueBtn.addEventListener('click', () => {
   autoQueueBtn.classList.contains('checked') ?
-    save('autoQueue', 'off') :
-    removeSaved('autoQueue');
+    removeSaved('autoQueue') :
+    save('autoQueue', 'on');
   autoQueueBtn.classList.toggle('checked');
 });
 
-
-if (localStorage.getItem('autoQueue') === 'off')
-  autoQueueBtn.classList.remove('checked');
+if (getSaved('autoQueue') === 'on')
+  autoQueueBtn.className = 'checked';
 
 
 function isLongerThan10Min(duration: string) {
@@ -146,19 +156,17 @@ function isLongerThan10Min(duration: string) {
 new MutationObserver(m => {
   for (const mutation of m) {
     if (mutation.type === "childList") {
-      const array = queueArray.join('');
-      queuelist.dataset.array = array;
+      const query = queueArray.join('');
+      store.upcomingQuery = query;
 
       if (location.pathname === '/upcoming') {
         history.replaceState({}, '',
           location.pathname + (
-            array ?
-              `?a=${array}` : ''
+            query ?
+              `?a=${query}` : ''
           )
         );
       }
     }
   }
 }).observe(queuelist, { childList: true });
-
-

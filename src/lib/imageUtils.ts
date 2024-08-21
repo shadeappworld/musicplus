@@ -1,33 +1,49 @@
-import { canvas, context, img } from "./dom";
-import { getApi } from "./utils";
+import { img } from "./dom";
 
 
-img.onload = () => img.naturalWidth === 120 ? img.src = img.src.replace('maxres', 'mq').replace('.webp', '.jpg').replace('vi_webp', 'vi') : '';
-
-img.onerror = () => img.src.includes('max') ? img.src = img.src.replace('maxres', 'mq') : '';
 
 
 export const blankImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 // Generates both channel and stream thumbnails
+
+
 export const generateImageUrl = (
   id: string,
-  res: string = 'mqdefault',
-  proxy: string = getApi('image')
-) => proxy + (id.startsWith('/') ?
-  `${id}=s176-c-k-c0x00ffffff-no-rj?host=yt3.googleusercontent.com` :
-  `/vi_webp/${id}/${res}.webp?host=i.ytimg.com`);
+  res: string,
+  music: string = ''
+) => 'https://wsrv.nl?url=https://' + (id.startsWith('/') ?
+  `yt3.googleusercontent.com${id}=s720-c-k-c0x00ffffff-no-rj&output=webp&w=360` :
+  `i.ytimg.com/vi_webp/${id}/${res}default.webp${music}`);
 
-// Square Image Generator 
-export function sqrThumb(canvasImg: HTMLImageElement) {
-  const width = canvasImg.width;
-  const height = canvasImg.height;
-  const side = Math.min(width, height);
-  canvas.width = side;
-  canvas.height = side;
-  // centre the selection
-  const offsetX = (width - side) / 2;
-  const offsetY = (height - side) / 2;
-  context.drawImage(canvasImg, offsetX, offsetY, side, side, 0, 0, side, side);
-  return canvas.toDataURL();
+
+
+export function getThumbIdFromLink(url: string) {
+
+  if (url.startsWith('/vi_webp'))
+    url = url.slice(9, 20);
+
+  // for featured playlists
+  if (url.startsWith('/') || url.length === 11) return url;
+  // simplify url 
+  if (url.includes('wsrv.nl'))
+    url = url.replace('https://wsrv.nl?url=', '');
+
+  const l = new URL(url);
+  const p = l.pathname;
+
+  return l.search.includes('ytimg') ?
+    p.split('/')[2] :
+    p.split('=')[0];
 }
+
+
+
+img.onload = () => img.naturalWidth === 120 ? img.src = img.src.replace('maxres', 'mq')
+  .replace('.webp', '.jpg').replace('vi_webp', 'vi') : '';
+
+img.onerror = () => img.src.includes('max') ? img.src = img.src.replace('maxres', 'mq')
+  .replace('.webp', '.jpg').replace('vi_webp', 'vi') : '';
+
+img.src = blankImage;
+
